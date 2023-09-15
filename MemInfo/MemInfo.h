@@ -141,6 +141,7 @@ typedef struct _PF_PHYSICAL_MEMORY_RANGE {
 
 typedef struct _PF_MEMORY_RANGE_INFO {
 	ULONG Version;
+	ULONG flags;
 	ULONG RangeCount;
 	PF_PHYSICAL_MEMORY_RANGE Ranges[ANYSIZE_ARRAY];
 } PF_MEMORY_RANGE_INFO, *PPF_MEMORY_RANGE_INFO;
@@ -200,6 +201,10 @@ typedef struct _MMPFN_IDENTITY {
 			ULONG Image : 1;
 			ULONG Mismatch : 1;
 		} e1;
+		struct
+		{
+			ULONG_PTR CombinedPage;
+		} e2;
 		PVOID FileObject;
 		PVOID UniqueFileObjectKey;
 		PVOID ProtoPteAddress;
@@ -407,14 +412,14 @@ typedef struct _PFFI_ENUMERATE_INFO {
 //
 // Private Source Entry
 //
-typedef struct _PF_PRIVSOURCE_INFO {
+typedef struct _PF_PRIVSOURCE_INFO
+{
 	PFS_PRIVATE_PAGE_SOURCE DbInfo;
 	PVOID EProcess;
-	SIZE_T WorkingSetPrivateSize;
-	SIZE_T NumberOfPrivatePages;
+	SIZE_T WsPrivatePages;
+	SIZE_T TotalPrivatePages;
 	ULONG SessionID;
 	CHAR ImageName[16];
-
 	union {
 		ULONG_PTR WsSwapPages;                 // process only PF_PRIVSOURCE_QUERY_WS_SWAP_PAGES.
 		ULONG_PTR SessionPagedPoolPages;       // session only.
@@ -427,9 +432,9 @@ typedef struct _PF_PRIVSOURCE_INFO {
 	ULONG Foreground : 1;           // process only.
 	ULONG PerProcessStore : 1;      // process only.
 	ULONG Spare : 28;
+} PF_PRIVSOURCE_INFO, * PPF_PRIVSOURCE_INFO;
 
-} PF_PRIVSOURCE_INFO, *PPF_PRIVSOURCE_INFO;
-
+#define PF_PRIVSOURCE_QUERY_REQUEST_VERSION 8
 //
 // Query Data Structure for SuperfetchPrivSourceQuery
 //

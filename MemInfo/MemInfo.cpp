@@ -23,6 +23,7 @@ LIST_ENTRY MmFileListHead;
 ULONG MmFileCount;
 ULONG MmPfnDatabaseSize;
 HANDLE PfiFileInfoHandle;
+PF_MEMORY_RANGE_INFO localMemoryRanges;
 PPF_MEMORY_RANGE_INFO MemoryRanges;
 
 void PrintHeader() {
@@ -62,7 +63,7 @@ NTSTATUS PfiQueryMemoryRanges() {
 	//
 	// Memory Ranges API was added in RTM, this is Version 1
 	//
-	MemoryRangeInfo.Version = 1;
+	MemoryRangeInfo.Version = 2;
 
 	//
 	// Build the Superfetch Information Buffer
@@ -83,8 +84,9 @@ NTSTATUS PfiQueryMemoryRanges() {
 		//
 		// Reallocate memory
 		//
-		MemoryRanges = static_cast<PPF_MEMORY_RANGE_INFO>(::HeapAlloc(GetProcessHeap(), 0, ResultLength));
-		MemoryRanges->Version = 1;
+		printf("small\n");
+		MemoryRanges = static_cast<PPF_MEMORY_RANGE_INFO>(::HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ResultLength));
+		MemoryRanges->Version = 2;
 
 		//
 		// Rebuild the buffer
@@ -105,12 +107,18 @@ NTSTATUS PfiQueryMemoryRanges() {
 			printf("Failure querying memory ranges!\n");
 			return Status;
 		}
+		printf("okok\n");
 	}
 	else {
 		//
 		// Use local buffer
 		//
-		MemoryRanges = &MemoryRangeInfo;
+		//memcpy(local)
+		//MemoryRanges = &MemoryRangeInfo;
+		localMemoryRanges = MemoryRangeInfo;
+		printf("MemoryRangeInfo->RangeCount=%d\n", MemoryRangeInfo.RangeCount);
+		printf("MemoryRangeInfo->flags=%d\n", MemoryRangeInfo.flags);
+		printf("MemoryRangeInfo->Version=%d\n", MemoryRangeInfo.Version);
 	}
 
 	return STATUS_SUCCESS;
@@ -176,7 +184,7 @@ NTSTATUS PfiInitializePfnDatabase() {
 	PfnDbStart = MmPfnDatabase = static_cast<PPF_PFN_PRIO_REQUEST>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, MmPfnDatabaseSize));
 	MmPfnDatabase->Version = 1;
 	MmPfnDatabase->RequestFlags = 1;
-
+	printf("222\n");
 	//
 	// Build the Superfetch Query
 	//
@@ -184,6 +192,8 @@ NTSTATUS PfiInitializePfnDatabase() {
 		MmPfnDatabase,
 		MmPfnDatabaseSize,
 		SuperfetchPfnQuery);
+	
+	printf("111\n");
 
 #if 1
 	//
@@ -196,7 +206,7 @@ NTSTATUS PfiInitializePfnDatabase() {
 		Pfn1 = MI_GET_PFN(i);
 		Pfn1->PageFrameIndex = i;
 	}
-
+	printf("333\n");
 	//
 	// Build a bitmap of pages
 	//
@@ -205,8 +215,8 @@ NTSTATUS PfiInitializePfnDatabase() {
 	RtlSetAllBits(&MmPfnBitMap);
 	MmVaBitmap = MmPfnBitMap;
 #endif
-
-
+	printf("MemoryRanges->RangeCount %d\n", MemoryRanges->RangeCount);
+	//return 0;
 	//
 	// Loop all the ranges
 	//
@@ -236,7 +246,7 @@ NTSTATUS PfiInitializePfnDatabase() {
 		&SuperfetchInfo,
 		sizeof(SuperfetchInfo),
 		&ResultLength);
-
+	printf("ns=%x\n", Status);
 	return Status;
 }
 
@@ -332,7 +342,7 @@ NTSTATUS PfiQueryPrivateSources() {
 				// We don't, allocate it
 				//
 				Process = static_cast<PPF_PROCESS>(::HeapAlloc(::GetProcessHeap(), 0, sizeof(PF_PROCESS) +
-					MmPrivateSources->InfoArray[i].NumberOfPrivatePages * sizeof(ULONG)));
+					MmPrivateSources->InfoArray[i].TotalPrivatePages * sizeof(ULONG)));
 				InsertTailList(&MmProcessListHead, &Process->ProcessLinks);
 				MmProcessCount++;
 
@@ -342,7 +352,7 @@ NTSTATUS PfiQueryPrivateSources() {
 				Process->ProcessKey = reinterpret_cast<ULONGLONG>(MmPrivateSources->InfoArray[i].EProcess);
 				strncpy_s(Process->ProcessName, MmPrivateSources->InfoArray[i].ImageName, 16);
 				Process->ProcessPfnCount = 0;
-				Process->PrivatePages = static_cast<ULONG>(MmPrivateSources->InfoArray[i].NumberOfPrivatePages);
+				Process->PrivatePages = static_cast<ULONG>(MmPrivateSources->InfoArray[i].TotalPrivatePages);
 				Process->ProcessId = reinterpret_cast<HANDLE>(static_cast<ULONGLONG>(MmPrivateSources->InfoArray[i].DbInfo.ProcessId));
 				Process->SessionId = MmPrivateSources->InfoArray[i].SessionID;
 				Process->ProcessHandle = NULL;
@@ -619,6 +629,7 @@ VOID PfiDumpPfnEntry(ULONG i, IN BOOLEAN ShowFiles) {
 	Pfn1 = MI_GET_PFN(i);
 
 	if ((Pfn1->u1.e1.UseDescription == MMPFNUSE_PROCESSPRIVATE) && (Pfn1->u1.e4.UniqueProcessKey != 0)) {
+		printf("ProcessName 111\n");
 		ProcessName = PfiFindProcess(Pfn1->u1.e4.UniqueProcessKey)->ProcessName;
 	}
 
@@ -920,6 +931,8 @@ ULONG PfiGetIndexForPfn(IN ULONG Pfn) {
 }
 
 int main(int argc, const char* argv[]) {
+	MemoryRanges = &localMemoryRanges;
+
 	PrintHeader();
 
 	NTSTATUS status;
@@ -988,6 +1001,7 @@ int main(int argc, const char* argv[]) {
 	// Remember the highest page
 	//
 	MmHighestPhysicalPageNumber = basicInfo.HighestPhysicalPageNumber;
+	printf("MmHighestPhysicalPageNumber=%d\n", MmHighestPhysicalPageNumber);
 
 	//
 	// Query memory ranges
@@ -1037,7 +1051,7 @@ int main(int argc, const char* argv[]) {
 		printf("Failure initializing File Info connection: %lx\n", status);
 		return 1;
 	}
-
+	printf("Done22.\n");
 	if (ShowAll || ShowSummary || ShowVirtual || ShowPage || ShowCache || ShowWs || ShowProcess || ShowUsage) {
 		//
 		// Query sources and files
@@ -1045,16 +1059,18 @@ int main(int argc, const char* argv[]) {
 		status = PfiQueryPrivateSources();
 		if (NT_SUCCESS(status) && ShowFiles)
 			status = PfiQueryFileInfo();
-
+		printf("Done333.\n");
 		if (NT_SUCCESS(status)) {
 			//
 			// Do the query
 			//
+			printf("Done444.\n");
 			status = PfiQueryPfnDatabase();
 			if (NT_SUCCESS(status)) {
 				//
 				// Now check the exact request and handle simple ones
 				//
+				printf("Done555.\n");
 				if (ShowAll)
 					PfiDumpPfnDatabase(ShowFiles ? true : false);
 
